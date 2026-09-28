@@ -25,6 +25,8 @@ add_executable(
         main.h
         Gstreamer/main_pipeline.cpp
         Gstreamer/main_pipeline.h
+        Gstreamer/Elements/Gst_elements.cpp
+        Gstreamer/Elements/Gst_elements.h
 )
 
 target_link_libraries(HailMary gstreamer-1.0 gobject-2.0 glib-2.0)
