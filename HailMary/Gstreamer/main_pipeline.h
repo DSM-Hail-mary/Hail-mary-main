@@ -4,6 +4,9 @@
 #include <gst/gst.h>
 #include <iostream>
 #include <stdint.h>
+#include "Elements/Camera/Gst_elements.h"
+#include "Elements/Caps/Gst_caps.h"
+#include "Elements/Sink/Gst_sink.h"
 
 extern GstElement *pipeline;
 

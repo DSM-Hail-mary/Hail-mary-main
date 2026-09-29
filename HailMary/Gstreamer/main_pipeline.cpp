@@ -8,10 +8,46 @@ int runPipeline() {
     gst_init(nullptr, nullptr);
 
     pipeline = gst_pipeline_new("pipeline");
-    gst_element_set_state(pipeline, GST_STATE_PLAYING);
+
+    CameraElement camera;
+    CapsElement caps;
+    SinkElement sink;
+
+    if (!camera.cameraInit() || !camera.cameraConnect()) {
+        cout << "Cannot connect to camera" << endl;
+        return -1;
+    }
+    if (!caps.capsInit() || !caps.capsConnect(camera.getOutput())) {
+        cout << "Cannot connect to caps" << endl;
+        return -1;
+    }
+    if (!sink.sinkInit() || !sink.sinkConnect(caps.getOutput())) {
+        cout << "Cannot connect to sink" << endl;
+        return -1;
+    }
 
     numberOfPipelines();
-    // messageBusTest();
+    gst_element_set_state(pipeline, GST_STATE_PLAYING);
+
+    for (int i = 0; i < 30; i++) {
+        GstSample *sample = sink.pullFrame(GST_SECOND);
+        if (sample == nullptr) {
+            cerr << "No frame" << endl;
+            break;
+        }
+
+        GstBuffer *buffer = gst_sample_get_buffer(sample);
+        GstMapInfo map;
+        if (gst_buffer_map(buffer, &map, GST_MAP_READ)) {
+            cout << "Frame " << i << " size: " << map.size << endl;
+            gst_buffer_unmap(buffer, &map);
+        }
+        gst_sample_unref(sample);
+    }
+
+    gst_element_set_state(pipeline, GST_STATE_NULL);
+    gst_object_unref(pipeline);
+    pipeline = nullptr;
     return 0;
 }
 

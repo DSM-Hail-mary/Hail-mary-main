@@ -21,7 +21,7 @@ class CameraElement {
         bool cameraInit();
         bool cameraConnect();
 
-        GstElement *getElement();
+        GstElement *getOutput();
 
     private:
         GstElement *src;

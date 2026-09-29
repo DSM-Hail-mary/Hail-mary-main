@@ -41,14 +41,9 @@ bool CameraElement::cameraConnect() {
     }
     addedToBin = true;
 
-    if (!gst_element_sync_state_with_parent(src)) {
-        cerr << "Failed to sync the state with pipeline" << endl;
-        return false;
-    }
-
     return true;
 }
 
-GstElement *CameraElement::getElement() {
+GstElement *CameraElement::getOutput() {
     return src;
 }
