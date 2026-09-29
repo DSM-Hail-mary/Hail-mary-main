@@ -1,20 +1,28 @@
 #include "Gst_elements.h"
+#include <iostream>
 using namespace std;
 
 CameraElement::CameraElement() {
     src = nullptr;
+    addedToBin = false;
 }
+
 CameraElement::~CameraElement() {
-    if (src != nullptr) {
+    if (src != nullptr && !addedToBin) {
         gst_object_unref(src);
-        src = nullptr;
     }
+    src = nullptr;
 }
 
 bool CameraElement::cameraInit() {
-    GstElement *src = gst_element_factory_make("v412src", "camera");
+    if (src != nullptr) {
+        cerr << "Camera element already created" << endl;
+        return false;
+    }
+
+    src = gst_element_factory_make(CAMERA_SRC, "camera");
     if (src == nullptr) {
-        cout << "Failed to create v412src element" << endl;
+        cerr << "Failed to create " << CAMERA_SRC << " element" << endl;
         return false;
     }
 
@@ -22,10 +30,21 @@ bool CameraElement::cameraInit() {
 }
 
 bool CameraElement::cameraConnect() {
-    gst_bin_add(GST_BIN(src), src);
-    gst_element_link(pipeline, src);
+    if (pipeline == nullptr || src == nullptr) {
+        cerr << "Cannot connect to " << CAMERA_SRC << " element" << endl;
+        return false;
+    }
 
-    gst_element_set_state(src, GST_STATE_PLAYING);
+    if (!gst_bin_add(GST_BIN(pipeline), src)) {
+        cerr << "Failed to add " << CAMERA_SRC << " to pipeline" << endl;
+        return false;
+    }
+    addedToBin = true;
+
+    if (!gst_element_sync_state_with_parent(src)) {
+        cerr << "Failed to sync the state with pipeline" << endl;
+        return false;
+    }
 
     return true;
 }

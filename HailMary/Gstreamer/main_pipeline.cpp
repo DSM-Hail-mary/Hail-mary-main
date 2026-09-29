@@ -10,8 +10,8 @@ int runPipeline() {
     pipeline = gst_pipeline_new("pipeline");
     gst_element_set_state(pipeline, GST_STATE_PLAYING);
 
-    messageBusTest();
     numberOfPipelines();
+    // messageBusTest();
     return 0;
 }
 
@@ -28,12 +28,13 @@ void messageBusTest() {
     gst_object_unref(bus);
     gst_element_set_state(pipeline, GST_STATE_NULL);
     gst_object_unref(pipeline);
+    pipeline = nullptr;
 }
 
 void numberOfPipelines() {
     cout << "Check the element" << endl;
     GValue item = G_VALUE_INIT;
-    static uint8_t num = 0;
+    int num = 0;
 
     GstIterator *iter = gst_bin_iterate_elements(GST_BIN(pipeline));
     while (gst_iterator_next(iter, &item) == GST_ITERATOR_OK) {
