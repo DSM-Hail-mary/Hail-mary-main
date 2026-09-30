@@ -6,7 +6,11 @@ using namespace std;
 
 static GstPadProbeReturn judgeProbe(GstPad *pad, GstPadProbeInfo *info, gpointer data) {
     JudgeElement *self = static_cast<JudgeElement *>(data);
-    self->judgeProcess(pad, GST_PAD_PROBE_INFO_BUFFER(info));
+
+    GstBuffer *buffer = gst_buffer_make_writable(GST_PAD_PROBE_INFO_BUFFER(info));
+    GST_PAD_PROBE_INFO_DATA(info) = buffer;
+
+    self->judgeProcess(pad, buffer);
     return GST_PAD_PROBE_OK;
 }
 
@@ -93,10 +97,17 @@ void JudgeElement::judgeProcess(GstPad *pad, GstBuffer *buffer) {
     }
 
     bool next = judgeDecide(hits);
-    if (next == problem) {
+    bool changed = next != problem;
+    problem = next;
+
+    JudgeResult *judgeResult = judgeMetaAdd(buffer);
+    if (judgeResult != nullptr) {
+        judgeResult->problem = problem;
+    }
+
+    if (!changed) {
         return;
     }
-    problem = next;
 
     GstStructure *result = gst_structure_new("judge", "problem", G_TYPE_BOOLEAN, problem, nullptr);
     gst_element_post_message(identity, gst_message_new_element(GST_OBJECT(identity), result));

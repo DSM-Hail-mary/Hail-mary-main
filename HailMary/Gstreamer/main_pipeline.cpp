@@ -3,6 +3,15 @@
 using namespace std;
 GstElement *pipeline;
 
+static void onFrame(GstSample *sample, const JudgeResult *result, void *userData) {
+    static int frames = 0;
+    frames++;
+    if (frames % 30 == 0) {
+        cout << "Sink frame " << frames << " judge="
+             << (result == nullptr ? "none" : (result->problem ? "problem" : "normal")) << endl;
+    }
+}
+
 int runPipeline() {
     cout << "Create new Pipeline" << endl;
     gst_init(nullptr, nullptr);
@@ -36,24 +45,46 @@ int runPipeline() {
         return -1;
     }
 
+    sink.sinkSetCallback(onFrame, nullptr);
+
     numberOfPipelines();
     gst_element_set_state(pipeline, GST_STATE_PLAYING);
 
-    for (int i = 0; i < 30; i++) {
-        GstSample *sample = sink.pullFrame(GST_SECOND);
-        if (sample == nullptr) {
-            cerr << "No frame" << endl;
-            break;
-        }
+    GstBus *bus = gst_element_get_bus(pipeline);
+    bool running = true;
+    while (running) {
+        GstMessage *msg = gst_bus_timed_pop_filtered(
+            bus, GST_CLOCK_TIME_NONE,
+            static_cast<GstMessageType>(GST_MESSAGE_ERROR | GST_MESSAGE_EOS | GST_MESSAGE_ELEMENT));
 
-        GstBuffer *buffer = gst_sample_get_buffer(sample);
-        GstMapInfo map;
-        if (gst_buffer_map(buffer, &map, GST_MAP_READ)) {
-            cout << "Frame " << i << " size: " << map.size << endl;
-            gst_buffer_unmap(buffer, &map);
+        switch (GST_MESSAGE_TYPE(msg)) {
+            case GST_MESSAGE_ERROR: {
+                GError *error = nullptr;
+                gst_message_parse_error(msg, &error, nullptr);
+                cerr << "Pipeline error: " << error->message << endl;
+                g_error_free(error);
+                running = false;
+                break;
+            }
+            case GST_MESSAGE_EOS:
+                cout << "End of stream" << endl;
+                running = false;
+                break;
+            case GST_MESSAGE_ELEMENT: {
+                const GstStructure *structure = gst_message_get_structure(msg);
+                gboolean problem = FALSE;
+                if (gst_structure_has_name(structure, "judge") &&
+                    gst_structure_get_boolean(structure, "problem", &problem)) {
+                    cout << "Bus: judge problem=" << (problem ? "true" : "false") << endl;
+                }
+                break;
+            }
+            default:
+                break;
         }
-        gst_sample_unref(sample);
+        gst_message_unref(msg);
     }
+    gst_object_unref(bus);
 
     gst_element_set_state(pipeline, GST_STATE_NULL);
     gst_object_unref(pipeline);

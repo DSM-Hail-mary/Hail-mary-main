@@ -4,6 +4,8 @@ using namespace std;
 
 SinkElement::SinkElement() {
     sink = nullptr;
+    callback = nullptr;
+    userData = nullptr;
     addedToBin = false;
 }
 
@@ -55,9 +57,29 @@ bool SinkElement::sinkConnect(GstElement *input) {
     return true;
 }
 
-GstSample *SinkElement::pullFrame(GstClockTime timeout) {
-    if (sink == nullptr) {
-        return nullptr;
+void SinkElement::sinkSetCallback(SinkCallback callback, void *userData) {
+    this->callback = callback;
+    this->userData = userData;
+
+    GstAppSinkCallbacks callbacks = {};
+    callbacks.new_sample = sinkNewSample;
+    gst_app_sink_set_callbacks(GST_APP_SINK(sink), &callbacks, this, nullptr);
+}
+
+GstFlowReturn SinkElement::sinkNewSample(GstAppSink *appsink, gpointer data) {
+    SinkElement *self = static_cast<SinkElement *>(data);
+
+    GstSample *sample = gst_app_sink_pull_sample(appsink);
+    if (sample == nullptr) {
+        return GST_FLOW_ERROR;
     }
-    return gst_app_sink_try_pull_sample(GST_APP_SINK(sink), timeout);
+
+    if (self->callback != nullptr) {
+        GstBuffer *buffer = gst_sample_get_buffer(sample);
+        const JudgeResult *result = buffer != nullptr ? judgeMetaGet(buffer) : nullptr;
+        self->callback(sample, result, self->userData);
+    }
+
+    gst_sample_unref(sample);
+    return GST_FLOW_OK;
 }

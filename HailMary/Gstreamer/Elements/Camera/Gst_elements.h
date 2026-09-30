@@ -2,13 +2,14 @@
 #define HAILMARY_GST_ELEMENTS_H
 
 #include <gst/gst.h>
+#include <gst/video/video.h>
 #include "main_pipeline.h"
 
-#ifdef _WIN32
-static const char *CAMERA_SRC = "mfvideosrc";
-#else
-static const char *CAMERA_SRC = "v4l2src";
-#endif
+static const char *OPENCV_HOST = "127.0.0.1";
+static const int OPENCV_PORT = 5000;
+static const int OPENCV_WIDTH = 1280;
+static const int OPENCV_HEIGHT = 720;
+static const int OPENCV_FPS = 30;
 
 class CameraElement {
     public:
@@ -25,6 +26,7 @@ class CameraElement {
 
     private:
         GstElement *src;
+        GstElement *parse;
         bool addedToBin;
 };
 

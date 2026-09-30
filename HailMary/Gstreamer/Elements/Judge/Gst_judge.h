@@ -5,6 +5,7 @@
 #include <gst/video/video.h>
 #include <vector>
 #include "Elements/AI/AI_types.h"
+#include "Judge_types.h"
 #include "main_pipeline.h"
 
 static const double JUDGE_SCORE = 0.6;
