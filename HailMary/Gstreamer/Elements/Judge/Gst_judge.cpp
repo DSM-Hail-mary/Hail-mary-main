@@ -82,16 +82,17 @@ void JudgeElement::judgeProcess(GstPad *pad, GstBuffer *buffer) {
     vector<BBox> hits;
     for (int i = 0; i < count; i++) {
         string n = to_string(i);
-        BBox box = {0, 0, 0, 0, 0.0f};
+        BBox box = {0, 0, 0, 0, 0.0f, 0};
         double score = 0.0;
         gst_structure_get_int(structure, ("x" + n).c_str(), &box.x);
         gst_structure_get_int(structure, ("y" + n).c_str(), &box.y);
         gst_structure_get_int(structure, ("w" + n).c_str(), &box.width);
         gst_structure_get_int(structure, ("h" + n).c_str(), &box.height);
         gst_structure_get_double(structure, ("s" + n).c_str(), &score);
+        gst_structure_get_int(structure, ("c" + n).c_str(), &box.classId);
         box.score = static_cast<float>(score);
 
-        if (score >= JUDGE_SCORE) {
+        if (box.classId == JUDGE_PROBLEM_CLASS && score >= JUDGE_SCORE) {
             hits.push_back(box);
         }
     }
@@ -159,7 +160,18 @@ void JudgeElement::judgeSnapshot(GstBuffer *buffer, GstCaps *caps, const vector<
     int width = GST_VIDEO_INFO_WIDTH(&info);
     int height = GST_VIDEO_INFO_HEIGHT(&info);
     int stride = GST_VIDEO_INFO_PLANE_STRIDE(&info, 0);
+    int pixelStride = GST_VIDEO_INFO_COMP_PSTRIDE(&info, 0);
+    int red = GST_VIDEO_INFO_COMP_POFFSET(&info, GST_VIDEO_COMP_R);
+    int green = GST_VIDEO_INFO_COMP_POFFSET(&info, GST_VIDEO_COMP_G);
+    int blue = GST_VIDEO_INFO_COMP_POFFSET(&info, GST_VIDEO_COMP_B);
     int thickness = 2;
+
+    if (!GST_VIDEO_INFO_IS_RGB(&info) || GST_VIDEO_INFO_N_PLANES(&info) != 1) {
+        cerr << "Snapshot needs packed RGB frame" << endl;
+        gst_buffer_unmap(copy, &map);
+        gst_buffer_unref(copy);
+        return;
+    }
 
     for (const BBox &box : boxes) {
         int x0 = max(0, box.x);
@@ -174,10 +186,10 @@ void JudgeElement::judgeSnapshot(GstBuffer *buffer, GstCaps *caps, const vector<
                 if (!edge) {
                     continue;
                 }
-                uint8_t *pixel = map.data + y * stride + x * 3;
-                pixel[0] = 255;
-                pixel[1] = 0;
-                pixel[2] = 0;
+                uint8_t *pixel = map.data + y * stride + x * pixelStride;
+                pixel[red] = 255;
+                pixel[green] = 0;
+                pixel[blue] = 0;
             }
         }
     }

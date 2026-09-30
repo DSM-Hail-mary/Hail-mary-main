@@ -41,9 +41,9 @@ bool CapsElement::capsInit() {
     GstCaps *caps = gst_caps_new_simple(
         "video/x-raw",
         "format", G_TYPE_STRING, "RGB",
-        "width", G_TYPE_INT, 640,
-        "height", G_TYPE_INT, 480,
-        "framerate", GST_TYPE_FRACTION, 30, 1,
+        "width", G_TYPE_INT, FRAME_WIDTH,
+        "height", G_TYPE_INT, FRAME_HEIGHT,
+        "framerate", GST_TYPE_FRACTION, FRAME_FPS, 1,
         nullptr);
     g_object_set(filter, "caps", caps, nullptr);
     gst_caps_unref(caps);

@@ -4,6 +4,10 @@
 #include <gst/gst.h>
 #include "main_pipeline.h"
 
+static const int FRAME_WIDTH = 640;
+static const int FRAME_HEIGHT = 480;
+static const int FRAME_FPS = 30;
+
 class CapsElement {
     public:
         CapsElement();

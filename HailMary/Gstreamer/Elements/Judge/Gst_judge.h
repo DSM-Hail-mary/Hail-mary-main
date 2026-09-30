@@ -9,6 +9,7 @@
 #include "main_pipeline.h"
 
 static const double JUDGE_SCORE = 0.6;
+static const int JUDGE_PROBLEM_CLASS = 0;
 static const int JUDGE_HIT_FRAMES = 3;
 static const int JUDGE_CLEAR_FRAMES = 5;
 

@@ -9,6 +9,10 @@
 
 static const gint64 AI_BUDGET_US = 33000;
 
+#ifdef HAILMARY_DEEPSTREAM
+static const char *AI_CONFIG_PATH = HAILMARY_MODEL_DIR "/config_infer_primary_yoloV8.txt";
+#endif
+
 class AIElement {
     public:
         AIElement();
@@ -30,6 +34,14 @@ class AIElement {
 
         GstElement *queue;
         GstElement *identity;
+#ifdef HAILMARY_DEEPSTREAM
+        GstElement *upload;
+        GstElement *uploadCaps;
+        GstElement *mux;
+        GstElement *infer;
+        GstElement *download;
+        GstElement *downloadCaps;
+#endif
         bool addedToBin;
         int skipCount;
 };

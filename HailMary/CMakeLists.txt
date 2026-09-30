@@ -4,21 +4,47 @@ project(HailMary)
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-if(DEFINED ENV{GSTREAMER_1_0_ROOT_X86_64})
-    set(GST_ROOT "$ENV{GSTREAMER_1_0_ROOT_X86_64}")
-else()
-    set(GST_ROOT "D:/mingw_x86_64")
-endif()
-
 include_directories(
         .
         Gstreamer
-        ${GST_ROOT}/include/gstreamer-1.0
-        ${GST_ROOT}/include/glib-2.0
-        ${GST_ROOT}/lib/glib-2.0/include
 )
 
-link_directories(${GST_ROOT}/lib)
+if(WIN32)
+    if(DEFINED ENV{GSTREAMER_1_0_ROOT_X86_64})
+        set(GST_ROOT "$ENV{GSTREAMER_1_0_ROOT_X86_64}")
+    else()
+        set(GST_ROOT "D:/mingw_x86_64")
+    endif()
+
+    include_directories(
+            ${GST_ROOT}/include/gstreamer-1.0
+            ${GST_ROOT}/include/glib-2.0
+            ${GST_ROOT}/lib/glib-2.0/include
+    )
+    link_directories(${GST_ROOT}/lib)
+    set(GST_LIBS gstreamer-1.0 gobject-2.0 glib-2.0 gstapp-1.0 gstvideo-1.0)
+else()
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(GST REQUIRED gstreamer-1.0 gstreamer-app-1.0 gstreamer-video-1.0)
+    include_directories(${GST_INCLUDE_DIRS})
+    link_directories(${GST_LIBRARY_DIRS})
+    set(GST_LIBS ${GST_LIBRARIES})
+
+    set(DEEPSTREAM_ROOT "/opt/nvidia/deepstream/deepstream" CACHE PATH "DeepStream SDK root")
+    if(EXISTS "${DEEPSTREAM_ROOT}/sources/includes/gstnvdsmeta.h")
+        set(HAILMARY_DEEPSTREAM ON)
+        include_directories(${DEEPSTREAM_ROOT}/sources/includes)
+        if(EXISTS "/usr/local/cuda/include")
+            include_directories(/usr/local/cuda/include)
+        endif()
+        link_directories(${DEEPSTREAM_ROOT}/lib)
+        list(APPEND GST_LIBS nvdsgst_meta nvds_meta)
+        set(CMAKE_BUILD_RPATH "${DEEPSTREAM_ROOT}/lib")
+        message(STATUS "DeepStream found: ${DEEPSTREAM_ROOT}")
+    else()
+        message(STATUS "DeepStream not found: AI element runs as pass-through")
+    endif()
+endif()
 
 add_executable(
         HailMary
@@ -41,7 +67,11 @@ add_executable(
         Gstreamer/Elements/Judge/Judge_types.h
 )
 
-target_link_libraries(HailMary gstreamer-1.0 gobject-2.0 glib-2.0 gstapp-1.0 gstvideo-1.0)
+target_link_libraries(HailMary ${GST_LIBS})
+target_compile_definitions(HailMary PRIVATE HAILMARY_MODEL_DIR="${CMAKE_SOURCE_DIR}/models")
+if(HAILMARY_DEEPSTREAM)
+    target_compile_definitions(HailMary PRIVATE HAILMARY_DEEPSTREAM)
+endif()
 
 if(WIN32)
     set(GST_COPY_DLLS_SCRIPT "${CMAKE_BINARY_DIR}/copy_gst_dlls.cmake")

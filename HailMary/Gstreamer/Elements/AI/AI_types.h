@@ -9,6 +9,7 @@ typedef struct {
     int width;
     int height;
     float score;
+    int classId;
 } BBox;
 
 #endif //HAILMARY_AI_TYPES_H
