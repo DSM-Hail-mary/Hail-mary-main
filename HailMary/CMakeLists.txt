@@ -32,9 +32,11 @@ add_executable(
         Gstreamer/Elements/Caps/Gst_caps.h
         Gstreamer/Elements/Sink/Gst_sink.cpp
         Gstreamer/Elements/Sink/Gst_sink.h
+        Gstreamer/Elements/AI/AI_element.cpp
+        Gstreamer/Elements/AI/AI_element.h
 )
 
-target_link_libraries(HailMary gstreamer-1.0 gobject-2.0 glib-2.0 gstapp-1.0)
+target_link_libraries(HailMary gstreamer-1.0 gobject-2.0 glib-2.0 gstapp-1.0 gstvideo-1.0)
 
 if(WIN32)
     set(GST_COPY_DLLS_SCRIPT "${CMAKE_BINARY_DIR}/copy_gst_dlls.cmake")

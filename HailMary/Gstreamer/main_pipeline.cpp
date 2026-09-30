@@ -11,6 +11,7 @@ int runPipeline() {
 
     CameraElement camera;
     CapsElement caps;
+    AIElement ai;
     SinkElement sink;
 
     if (!camera.cameraInit() || !camera.cameraConnect()) {
@@ -21,7 +22,11 @@ int runPipeline() {
         cout << "Cannot connect to caps" << endl;
         return -1;
     }
-    if (!sink.sinkInit() || !sink.sinkConnect(caps.getOutput())) {
+    if (!ai.aiInit() || !ai.aiConnect(caps.getOutput())) {
+        cout << "Cannot connect to AI" << endl;
+        return -1;
+    }
+    if (!sink.sinkInit() || !sink.sinkConnect(ai.getOutput())) {
         cout << "Cannot connect to sink" << endl;
         return -1;
     }
