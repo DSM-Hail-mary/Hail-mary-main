@@ -12,6 +12,7 @@ int runPipeline() {
     CameraElement camera;
     CapsElement caps;
     AIElement ai;
+    JudgeElement judge;
     SinkElement sink;
 
     if (!camera.cameraInit() || !camera.cameraConnect()) {
@@ -26,7 +27,11 @@ int runPipeline() {
         cout << "Cannot connect to AI" << endl;
         return -1;
     }
-    if (!sink.sinkInit() || !sink.sinkConnect(ai.getOutput())) {
+    if (!judge.judgeInit() || !judge.judgeConnect(ai.getOutput())) {
+        cout << "Cannot connect to judge" << endl;
+        return -1;
+    }
+    if (!sink.sinkInit() || !sink.sinkConnect(judge.getOutput())) {
         cout << "Cannot connect to sink" << endl;
         return -1;
     }

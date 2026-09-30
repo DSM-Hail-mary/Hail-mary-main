@@ -34,6 +34,9 @@ add_executable(
         Gstreamer/Elements/Sink/Gst_sink.h
         Gstreamer/Elements/AI/AI_element.cpp
         Gstreamer/Elements/AI/AI_element.h
+        Gstreamer/Elements/AI/AI_types.h
+        Gstreamer/Elements/Judge/Gst_judge.cpp
+        Gstreamer/Elements/Judge/Gst_judge.h
 )
 
 target_link_libraries(HailMary gstreamer-1.0 gobject-2.0 glib-2.0 gstapp-1.0 gstvideo-1.0)

@@ -8,6 +8,7 @@
 #include "Elements/Caps/Gst_caps.h"
 #include "Elements/Sink/Gst_sink.h"
 #include "Elements/AI/AI_element.h"
+#include "Elements/Judge/Gst_judge.h"
 
 extern GstElement *pipeline;
 
