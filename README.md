@@ -12,12 +12,5 @@ OpenCV(Python) ─TCP─▶ Camera → Caps → AI(nvinfer) → Judge → Sink
 | Judge | 문제/정상 판정, 스냅샷 저장, `JudgeResult` 전달 |
 | Sink | 콜백으로 프레임 + 판정 결과 전달 |
 
-## 실행 (Jetson)
-```bash
-cd HailMary/models && CUDA_VER=<CUDA 버전> ./run_deepstream.sh
-cd .. && mkdir -p build && cd build && cmake .. && make -j$(nproc)
-./HailMary
-```
-
 ## 개발 기록
 [관련 IL 보러가기](https://github.com/ilfpns/IL/tree/main/Projects/HailMary)
