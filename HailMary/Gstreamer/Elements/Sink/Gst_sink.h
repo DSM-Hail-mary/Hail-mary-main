@@ -3,7 +3,10 @@
 
 #include <gst/gst.h>
 #include <gst/app/gstappsink.h>
+#include "Elements/Judge/Judge_types.h"
 #include "main_pipeline.h"
+
+typedef void (*SinkCallback)(GstSample *sample, const JudgeResult *result, void *userData);
 
 class SinkElement {
     public:
@@ -15,11 +18,14 @@ class SinkElement {
 
         bool sinkInit();
         bool sinkConnect(GstElement *input);
-
-        GstSample *pullFrame(GstClockTime timeout);
+        void sinkSetCallback(SinkCallback callback, void *userData);
 
     private:
+        static GstFlowReturn sinkNewSample(GstAppSink *appsink, gpointer data);
+
         GstElement *sink;
+        SinkCallback callback;
+        void *userData;
         bool addedToBin;
 };
 

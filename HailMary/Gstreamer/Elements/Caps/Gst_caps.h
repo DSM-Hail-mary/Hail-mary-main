@@ -4,6 +4,10 @@
 #include <gst/gst.h>
 #include "main_pipeline.h"
 
+static const char *FRAME_FORMAT = "RGBA";
+static const int FRAME_WIDTH = 1280;
+static const int FRAME_HEIGHT = 720;
+
 class CapsElement {
     public:
         CapsElement();
@@ -19,8 +23,6 @@ class CapsElement {
 
     private:
         GstElement *convert;
-        GstElement *scale;
-        GstElement *rate;
         GstElement *filter;
         bool addedToBin;
 };
