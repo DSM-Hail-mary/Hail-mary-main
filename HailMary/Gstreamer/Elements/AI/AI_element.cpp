@@ -1,8 +1,6 @@
 #include "AI_element.h"
 #include <string>
-#ifdef HAILMARY_DEEPSTREAM
 #include "gstnvdsmeta.h"
-#endif
 using namespace std;
 
 static GstPadProbeReturn aiProbe(GstPad *pad, GstPadProbeInfo *info, gpointer data) {
@@ -11,37 +9,32 @@ static GstPadProbeReturn aiProbe(GstPad *pad, GstPadProbeInfo *info, gpointer da
     GstBuffer *buffer = gst_buffer_make_writable(GST_PAD_PROBE_INFO_BUFFER(info));
     GST_PAD_PROBE_INFO_DATA(info) = buffer;
 
-    self->aiProcess(pad, buffer);
+    self->aiProcess(buffer);
     return GST_PAD_PROBE_OK;
 }
 
 AIElement::AIElement() {
     queue = nullptr;
-    identity = nullptr;
-#ifdef HAILMARY_DEEPSTREAM
     upload = nullptr;
     uploadCaps = nullptr;
     mux = nullptr;
     infer = nullptr;
     download = nullptr;
     downloadCaps = nullptr;
-#endif
+    identity = nullptr;
     addedToBin = false;
-    skipCount = 0;
 }
 
 AIElement::~AIElement() {
     if (!addedToBin) {
         if (queue != nullptr) gst_object_unref(queue);
-        if (identity != nullptr) gst_object_unref(identity);
-#ifdef HAILMARY_DEEPSTREAM
         if (upload != nullptr) gst_object_unref(upload);
         if (uploadCaps != nullptr) gst_object_unref(uploadCaps);
         if (mux != nullptr) gst_object_unref(mux);
         if (infer != nullptr) gst_object_unref(infer);
         if (download != nullptr) gst_object_unref(download);
         if (downloadCaps != nullptr) gst_object_unref(downloadCaps);
-#endif
+        if (identity != nullptr) gst_object_unref(identity);
     }
     queue = nullptr;
     identity = nullptr;
@@ -54,8 +47,14 @@ bool AIElement::aiInit() {
     }
 
     queue = gst_element_factory_make("queue", "ai_queue");
+    upload = gst_element_factory_make("nvvideoconvert", "ai_upload");
+    uploadCaps = gst_element_factory_make("capsfilter", "ai_upload_caps");
+    mux = gst_element_factory_make("nvstreammux", "ai_mux");
+    infer = gst_element_factory_make("nvinfer", "ai_infer");
+    download = gst_element_factory_make("nvvideoconvert", "ai_download");
+    downloadCaps = gst_element_factory_make("capsfilter", "ai_download_caps");
     identity = gst_element_factory_make("identity", "ai_identity");
-    if (queue == nullptr || identity == nullptr) {
+    if (!queue || !upload || !uploadCaps || !mux || !infer || !download || !downloadCaps || !identity) {
         cerr << "Failed to create AI elements" << endl;
         return false;
     }
@@ -71,18 +70,6 @@ bool AIElement::aiInit() {
                  "max-size-time", (guint64) 0,
                  nullptr);
 
-#ifdef HAILMARY_DEEPSTREAM
-    upload = gst_element_factory_make("nvvideoconvert", "ai_upload");
-    uploadCaps = gst_element_factory_make("capsfilter", "ai_upload_caps");
-    mux = gst_element_factory_make("nvstreammux", "ai_mux");
-    infer = gst_element_factory_make("nvinfer", "ai_infer");
-    download = gst_element_factory_make("nvvideoconvert", "ai_download");
-    downloadCaps = gst_element_factory_make("capsfilter", "ai_download_caps");
-    if (!upload || !uploadCaps || !mux || !infer || !download || !downloadCaps) {
-        cerr << "Failed to create DeepStream elements" << endl;
-        return false;
-    }
-
     GstCaps *nvmmCaps = gst_caps_from_string("video/x-raw(memory:NVMM),format=NV12");
     g_object_set(uploadCaps, "caps", nvmmCaps, nullptr);
     gst_caps_unref(nvmmCaps);
@@ -91,16 +78,16 @@ bool AIElement::aiInit() {
                  "batch-size", 1,
                  "width", FRAME_WIDTH,
                  "height", FRAME_HEIGHT,
+                 "enable-padding", TRUE,
                  "live-source", TRUE,
                  "batched-push-timeout", 40000,
                  nullptr);
 
     g_object_set(infer, "config-file-path", AI_CONFIG_PATH, nullptr);
 
-    GstCaps *rawCaps = gst_caps_from_string("video/x-raw,format=RGBA");
+    GstCaps *rawCaps = gst_caps_new_simple("video/x-raw", "format", G_TYPE_STRING, FRAME_FORMAT, nullptr);
     g_object_set(downloadCaps, "caps", rawCaps, nullptr);
     gst_caps_unref(rawCaps);
-#endif
 
     return true;
 }
@@ -111,7 +98,6 @@ bool AIElement::aiConnect(GstElement *input) {
         return false;
     }
 
-#ifdef HAILMARY_DEEPSTREAM
     gst_bin_add_many(GST_BIN(pipeline), queue, upload, uploadCaps, mux, infer,
                      download, downloadCaps, identity, nullptr);
     addedToBin = true;
@@ -135,15 +121,6 @@ bool AIElement::aiConnect(GstElement *input) {
         cerr << "Failed to link AI inference elements" << endl;
         return false;
     }
-#else
-    gst_bin_add_many(GST_BIN(pipeline), queue, identity, nullptr);
-    addedToBin = true;
-
-    if (!gst_element_link_many(input, queue, identity, nullptr)) {
-        cerr << "Failed to link AI elements" << endl;
-        return false;
-    }
-#endif
 
     GstPad *pad = gst_element_get_static_pad(identity, "src");
     gst_pad_add_probe(pad, GST_PAD_PROBE_TYPE_BUFFER, aiProbe, this, nullptr);
@@ -154,8 +131,7 @@ bool AIElement::aiConnect(GstElement *input) {
     return true;
 }
 
-void AIElement::aiProcess(GstPad *pad, GstBuffer *buffer) {
-#ifdef HAILMARY_DEEPSTREAM
+void AIElement::aiProcess(GstBuffer *buffer) {
     NvDsBatchMeta *batchMeta = gst_buffer_get_nvds_batch_meta(buffer);
     if (batchMeta == nullptr) {
         return;
@@ -178,48 +154,6 @@ void AIElement::aiProcess(GstPad *pad, GstBuffer *buffer) {
     }
 
     aiAttachMeta(buffer, boxes);
-#else
-    if (skipCount > 0) {
-        skipCount--;
-        return;
-    }
-
-    GstCaps *caps = gst_pad_get_current_caps(pad);
-    if (caps == nullptr) {
-        return;
-    }
-
-    GstVideoInfo info;
-    if (!gst_video_info_from_caps(&info, caps)) {
-        gst_caps_unref(caps);
-        return;
-    }
-
-    GstMapInfo map;
-    if (!gst_buffer_map(buffer, &map, GST_MAP_READ)) {
-        gst_caps_unref(caps);
-        return;
-    }
-
-    gint64 start = g_get_monotonic_time();
-    vector<BBox> boxes = aiInference(info, map.data);
-    gst_buffer_unmap(buffer, &map);
-
-    aiAttachMeta(buffer, boxes);
-
-    aiTimer(g_get_monotonic_time() - start);
-    gst_caps_unref(caps);
-#endif
-}
-
-void AIElement::aiTimer(gint64 elapsed) {
-    if (elapsed > AI_BUDGET_US) {
-        skipCount = static_cast<int>(elapsed / AI_BUDGET_US);
-    }
-}
-
-vector<BBox> AIElement::aiInference(const GstVideoInfo &info, const uint8_t *data) {
-    return vector<BBox>();
 }
 
 void AIElement::aiAttachMeta(GstBuffer *buffer, const vector<BBox> &boxes) {

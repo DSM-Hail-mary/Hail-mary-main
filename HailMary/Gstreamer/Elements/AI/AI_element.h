@@ -2,16 +2,11 @@
 #define HAILMARY_AI_ELEMENT_H
 
 #include <gst/gst.h>
-#include <gst/video/video.h>
 #include <vector>
 #include "AI_types.h"
 #include "main_pipeline.h"
 
-static const gint64 AI_BUDGET_US = 33000;
-
-#ifdef HAILMARY_DEEPSTREAM
 static const char *AI_CONFIG_PATH = HAILMARY_MODEL_DIR "/config_infer_primary_yoloV8.txt";
-#endif
 
 class AIElement {
     public:
@@ -23,27 +18,22 @@ class AIElement {
 
         bool aiInit();
         bool aiConnect(GstElement *input);
-        void aiProcess(GstPad *pad, GstBuffer *buffer);
+        void aiProcess(GstBuffer *buffer);
 
         GstElement *getOutput();
 
     private:
-        void aiTimer(gint64 elapsed);
-        std::vector<BBox> aiInference(const GstVideoInfo &info, const uint8_t *data);
         void aiAttachMeta(GstBuffer *buffer, const std::vector<BBox> &boxes);
 
         GstElement *queue;
-        GstElement *identity;
-#ifdef HAILMARY_DEEPSTREAM
         GstElement *upload;
         GstElement *uploadCaps;
         GstElement *mux;
         GstElement *infer;
         GstElement *download;
         GstElement *downloadCaps;
-#endif
+        GstElement *identity;
         bool addedToBin;
-        int skipCount;
 };
 
 #endif //HAILMARY_AI_ELEMENT_H
