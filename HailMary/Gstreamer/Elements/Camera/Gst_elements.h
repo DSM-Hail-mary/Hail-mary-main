@@ -3,7 +3,6 @@
 
 #include <gst/gst.h>
 #include <gst/video/video.h>
-#include "main_pipeline.h"
 
 static const char *OPENCV_HOST = "127.0.0.1";
 static const int OPENCV_PORT = 5000;
@@ -20,7 +19,7 @@ class CameraElement {
         CameraElement &operator=(const CameraElement &) = delete;
 
         bool cameraInit();
-        bool cameraConnect();
+        bool cameraConnect(GstElement *bin);
 
         GstElement *getOutput();
 

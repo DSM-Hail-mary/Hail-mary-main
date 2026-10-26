@@ -1,5 +1,6 @@
 #include "Gst_judge.h"
 #include <fstream>
+#include <iostream>
 #include <string>
 #include <algorithm>
 using namespace std;
@@ -21,9 +22,18 @@ JudgeElement::JudgeElement() {
     hitCount = 0;
     missCount = 0;
     snapshotIndex = 0;
+    snapshotStop = false;
+    snapshotThread = thread(&JudgeElement::judgeSnapshotWorker, this);
 }
 
 JudgeElement::~JudgeElement() {
+    {
+        lock_guard<mutex> lock(snapshotMutex);
+        snapshotStop = true;
+    }
+    snapshotCond.notify_one();
+    snapshotThread.join();
+
     if (identity != nullptr && !addedToBin) {
         gst_object_unref(identity);
     }
@@ -45,14 +55,14 @@ bool JudgeElement::judgeInit() {
     return true;
 }
 
-bool JudgeElement::judgeConnect(GstElement *input) {
-    if (pipeline == nullptr || input == nullptr || identity == nullptr) {
+bool JudgeElement::judgeConnect(GstElement *bin, GstElement *input) {
+    if (bin == nullptr || input == nullptr || identity == nullptr) {
         cerr << "Cannot connect to judge element" << endl;
         return false;
     }
 
-    if (!gst_bin_add(GST_BIN(pipeline), identity)) {
-        cerr << "Failed to add judge to pipeline" << endl;
+    if (!gst_bin_add(GST_BIN(bin), identity)) {
+        cerr << "Failed to add judge to bin" << endl;
         return false;
     }
     addedToBin = true;
@@ -117,7 +127,7 @@ void JudgeElement::judgeProcess(GstPad *pad, GstBuffer *buffer) {
         cout << "Judge: problem detected" << endl;
         GstCaps *caps = gst_pad_get_current_caps(pad);
         if (caps != nullptr) {
-            judgeSnapshot(buffer, caps, hits);
+            judgeSnapshotQueue(buffer, caps, hits);
             gst_caps_unref(caps);
         }
     } else {
@@ -143,17 +153,55 @@ bool JudgeElement::judgeDecide(const vector<BBox> &boxes) {
     return problem;
 }
 
-void JudgeElement::judgeSnapshot(GstBuffer *buffer, GstCaps *caps, const vector<BBox> &boxes) {
-    GstVideoInfo info;
-    if (!gst_video_info_from_caps(&info, caps)) {
+// Runs on the streaming thread: only copy the frame, encoding happens in the worker
+void JudgeElement::judgeSnapshotQueue(GstBuffer *buffer, GstCaps *caps, const vector<BBox> &boxes) {
+    lock_guard<mutex> lock(snapshotMutex);
+    if (snapshotJobs.size() >= JUDGE_SNAPSHOT_QUEUE_MAX) {
+        cerr << "Snapshot queue full, dropping snapshot" << endl;
         return;
     }
 
-    GstBuffer *copy = gst_buffer_copy_deep(buffer);
+    SnapshotJob job;
+    job.buffer = gst_buffer_copy_deep(buffer);
+    job.caps = gst_caps_ref(caps);
+    job.boxes = boxes;
+    job.time = time(nullptr);
+    job.index = snapshotIndex++;
+    snapshotJobs.push_back(job);
+    snapshotCond.notify_one();
+}
+
+void JudgeElement::judgeSnapshotWorker() {
+    while (true) {
+        unique_lock<mutex> lock(snapshotMutex);
+        snapshotCond.wait(lock, [this] { return snapshotStop || !snapshotJobs.empty(); });
+        if (snapshotJobs.empty()) {
+            return;
+        }
+
+        SnapshotJob job = snapshotJobs.front();
+        snapshotJobs.pop_front();
+        lock.unlock();
+
+        judgeSnapshot(job);
+        gst_buffer_unref(job.buffer);
+        gst_caps_unref(job.caps);
+    }
+}
+
+void JudgeElement::judgeSnapshot(SnapshotJob &job) {
+    GstVideoInfo info;
+    if (!gst_video_info_from_caps(&info, job.caps)) {
+        return;
+    }
+
+    if (!GST_VIDEO_INFO_IS_RGB(&info) || GST_VIDEO_INFO_N_PLANES(&info) != 1) {
+        cerr << "Snapshot needs packed RGB frame" << endl;
+        return;
+    }
 
     GstMapInfo map;
-    if (!gst_buffer_map(copy, &map, GST_MAP_WRITE)) {
-        gst_buffer_unref(copy);
+    if (!gst_buffer_map(job.buffer, &map, GST_MAP_WRITE)) {
         return;
     }
 
@@ -166,14 +214,7 @@ void JudgeElement::judgeSnapshot(GstBuffer *buffer, GstCaps *caps, const vector<
     int blue = GST_VIDEO_INFO_COMP_POFFSET(&info, GST_VIDEO_COMP_B);
     int thickness = 2;
 
-    if (!GST_VIDEO_INFO_IS_RGB(&info) || GST_VIDEO_INFO_N_PLANES(&info) != 1) {
-        cerr << "Snapshot needs packed RGB frame" << endl;
-        gst_buffer_unmap(copy, &map);
-        gst_buffer_unref(copy);
-        return;
-    }
-
-    for (const BBox &box : boxes) {
+    for (const BBox &box : job.boxes) {
         int x0 = max(0, box.x);
         int y0 = max(0, box.y);
         int x1 = min(width - 1, box.x + box.width);
@@ -193,10 +234,9 @@ void JudgeElement::judgeSnapshot(GstBuffer *buffer, GstCaps *caps, const vector<
             }
         }
     }
-    gst_buffer_unmap(copy, &map);
+    gst_buffer_unmap(job.buffer, &map);
 
-    GstSample *sample = gst_sample_new(copy, caps, nullptr, nullptr);
-    gst_buffer_unref(copy);
+    GstSample *sample = gst_sample_new(job.buffer, job.caps, nullptr, nullptr);
 
     GstCaps *jpegCaps = gst_caps_new_empty_simple("image/jpeg");
     GError *error = nullptr;
@@ -212,7 +252,12 @@ void JudgeElement::judgeSnapshot(GstBuffer *buffer, GstCaps *caps, const vector<
 
     GstBuffer *jpegBuffer = gst_sample_get_buffer(jpeg);
     if (gst_buffer_map(jpegBuffer, &map, GST_MAP_READ)) {
-        string path = "snapshot_" + to_string(snapshotIndex++) + ".jpg";
+        tm local;
+        localtime_r(&job.time, &local);
+        char stamp[32];
+        strftime(stamp, sizeof(stamp), "%Y%m%d_%H%M%S", &local);
+
+        string path = "snapshot_" + string(stamp) + "_" + to_string(job.index) + ".jpg";
         ofstream file(path, ios::binary);
         file.write(reinterpret_cast<const char *>(map.data), map.size);
         cout << "Snapshot saved: " << path << endl;

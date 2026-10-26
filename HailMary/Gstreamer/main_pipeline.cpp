@@ -1,7 +1,28 @@
 #include "main_pipeline.h"
+#include <chrono>
+#include <csignal>
+#include <thread>
 
 using namespace std;
-GstElement *pipeline;
+
+static volatile sig_atomic_t stopRequested = 0;
+
+static void onSignal(int sig) {
+    stopRequested = 1;
+    // A second Ctrl+C kills the process if shutdown hangs
+    signal(sig, SIG_DFL);
+}
+
+// Sleep that wakes up early when a stop signal arrives
+static bool waitOrStop(int seconds) {
+    for (int i = 0; i < seconds * 10; i++) {
+        if (stopRequested) {
+            return false;
+        }
+        this_thread::sleep_for(chrono::milliseconds(100));
+    }
+    return !stopRequested;
+}
 
 static void onFrame(GstSample *sample, const JudgeResult *result, void *userData) {
     static int frames = 0;
@@ -16,7 +37,10 @@ int runPipeline() {
     cout << "Create new Pipeline" << endl;
     gst_init(nullptr, nullptr);
 
-    pipeline = gst_pipeline_new("pipeline");
+    signal(SIGINT, onSignal);
+    signal(SIGTERM, onSignal);
+
+    GstElement *pipeline = gst_pipeline_new("pipeline");
 
     CameraElement camera;
     CapsElement caps;
@@ -24,38 +48,46 @@ int runPipeline() {
     JudgeElement judge;
     SinkElement sink;
 
-    if (!camera.cameraInit() || !camera.cameraConnect()) {
-        cout << "Cannot connect to camera" << endl;
-        return -1;
+    const char *failed = nullptr;
+    if (!camera.cameraInit() || !camera.cameraConnect(pipeline)) {
+        failed = "camera";
+    } else if (!caps.capsInit() || !caps.capsConnect(pipeline, camera.getOutput())) {
+        failed = "caps";
+    } else if (!ai.aiInit() || !ai.aiConnect(pipeline, caps.getOutput())) {
+        failed = "AI";
+    } else if (!judge.judgeInit() || !judge.judgeConnect(pipeline, ai.getOutput())) {
+        failed = "judge";
+    } else if (!sink.sinkInit() || !sink.sinkConnect(pipeline, judge.getOutput())) {
+        failed = "sink";
     }
-    if (!caps.capsInit() || !caps.capsConnect(camera.getOutput())) {
-        cout << "Cannot connect to caps" << endl;
-        return -1;
-    }
-    if (!ai.aiInit() || !ai.aiConnect(caps.getOutput())) {
-        cout << "Cannot connect to AI" << endl;
-        return -1;
-    }
-    if (!judge.judgeInit() || !judge.judgeConnect(ai.getOutput())) {
-        cout << "Cannot connect to judge" << endl;
-        return -1;
-    }
-    if (!sink.sinkInit() || !sink.sinkConnect(judge.getOutput())) {
-        cout << "Cannot connect to sink" << endl;
+    if (failed != nullptr) {
+        cout << "Cannot connect to " << failed << endl;
+        gst_object_unref(pipeline);
         return -1;
     }
 
     sink.sinkSetCallback(onFrame, nullptr);
 
-    numberOfPipelines();
+    numberOfPipelines(pipeline);
     gst_element_set_state(pipeline, GST_STATE_PLAYING);
 
     GstBus *bus = gst_element_get_bus(pipeline);
     bool running = true;
+    int reconnectAttempts = 0;
+    int exitCode = 0;
     while (running) {
+        if (stopRequested) {
+            cout << "Stop requested, shutting down" << endl;
+            break;
+        }
+
         GstMessage *msg = gst_bus_timed_pop_filtered(
-            bus, GST_CLOCK_TIME_NONE,
-            static_cast<GstMessageType>(GST_MESSAGE_ERROR | GST_MESSAGE_EOS | GST_MESSAGE_ELEMENT));
+            bus, 100 * GST_MSECOND,
+            static_cast<GstMessageType>(GST_MESSAGE_ERROR | GST_MESSAGE_EOS |
+                                        GST_MESSAGE_ELEMENT | GST_MESSAGE_ASYNC_DONE));
+        if (msg == nullptr) {
+            continue;
+        }
 
         switch (GST_MESSAGE_TYPE(msg)) {
             case GST_MESSAGE_ERROR: {
@@ -64,11 +96,36 @@ int runPipeline() {
                 cerr << "Pipeline error: " << error->message << endl;
                 g_error_free(error);
                 running = false;
+                exitCode = -1;
                 break;
             }
             case GST_MESSAGE_EOS:
-                cout << "End of stream" << endl;
-                running = false;
+                if (reconnectAttempts >= RECONNECT_MAX_ATTEMPTS) {
+                    cerr << "End of stream: reconnect failed " << RECONNECT_MAX_ATTEMPTS << " times" << endl;
+                    running = false;
+                    exitCode = -1;
+                    break;
+                }
+                reconnectAttempts++;
+                cout << "Stream disconnected, reconnecting (" << reconnectAttempts << "/"
+                     << RECONNECT_MAX_ATTEMPTS << ")" << endl;
+
+                // tcpserversrc listens again once the pipeline is restarted
+                gst_element_set_state(pipeline, GST_STATE_NULL);
+                if (!waitOrStop(RECONNECT_INTERVAL_SEC)) {
+                    running = false;
+                    break;
+                }
+                if (gst_element_set_state(pipeline, GST_STATE_PLAYING) == GST_STATE_CHANGE_FAILURE) {
+                    cerr << "Failed to restart pipeline" << endl;
+                }
+                break;
+            case GST_MESSAGE_ASYNC_DONE:
+                // Preroll finished: a client is connected and frames are flowing
+                if (GST_MESSAGE_SRC(msg) == GST_OBJECT(pipeline) && reconnectAttempts > 0) {
+                    cout << "Stream reconnected" << endl;
+                    reconnectAttempts = 0;
+                }
                 break;
             case GST_MESSAGE_ELEMENT: {
                 const GstStructure *structure = gst_message_get_structure(msg);
@@ -88,11 +145,11 @@ int runPipeline() {
 
     gst_element_set_state(pipeline, GST_STATE_NULL);
     gst_object_unref(pipeline);
-    pipeline = nullptr;
-    return 0;
+    cout << "Pipeline stopped" << endl;
+    return exitCode;
 }
 
-void messageBusTest() {
+void messageBusTest(GstElement *pipeline) {
     GstBus *bus = gst_element_get_bus(pipeline);
     GstMessage *msg = gst_bus_timed_pop_filtered(
         bus, 3 * GST_SECOND,
@@ -105,10 +162,9 @@ void messageBusTest() {
     gst_object_unref(bus);
     gst_element_set_state(pipeline, GST_STATE_NULL);
     gst_object_unref(pipeline);
-    pipeline = nullptr;
 }
 
-void numberOfPipelines() {
+void numberOfPipelines(GstElement *pipeline) {
     cout << "Check the element" << endl;
     GValue item = G_VALUE_INIT;
     int num = 0;

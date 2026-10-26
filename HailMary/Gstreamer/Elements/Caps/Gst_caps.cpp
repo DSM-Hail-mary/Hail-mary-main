@@ -40,13 +40,13 @@ bool CapsElement::capsInit() {
     return true;
 }
 
-bool CapsElement::capsConnect(GstElement *input) {
-    if (pipeline == nullptr || input == nullptr || filter == nullptr) {
+bool CapsElement::capsConnect(GstElement *bin, GstElement *input) {
+    if (bin == nullptr || input == nullptr || filter == nullptr) {
         cerr << "Cannot connect to caps elements" << endl;
         return false;
     }
 
-    gst_bin_add_many(GST_BIN(pipeline), convert, filter, nullptr);
+    gst_bin_add_many(GST_BIN(bin), convert, filter, nullptr);
     addedToBin = true;
 
     if (!gst_element_link_many(input, convert, filter, nullptr)) {

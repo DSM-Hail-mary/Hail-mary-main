@@ -4,7 +4,6 @@
 #include <gst/gst.h>
 #include <gst/app/gstappsink.h>
 #include "Elements/Judge/Judge_types.h"
-#include "main_pipeline.h"
 
 typedef void (*SinkCallback)(GstSample *sample, const JudgeResult *result, void *userData);
 
@@ -17,7 +16,7 @@ class SinkElement {
         SinkElement &operator=(const SinkElement &) = delete;
 
         bool sinkInit();
-        bool sinkConnect(GstElement *input);
+        bool sinkConnect(GstElement *bin, GstElement *input);
         void sinkSetCallback(SinkCallback callback, void *userData);
 
     private:

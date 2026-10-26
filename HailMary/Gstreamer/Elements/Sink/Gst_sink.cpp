@@ -37,14 +37,14 @@ bool SinkElement::sinkInit() {
     return true;
 }
 
-bool SinkElement::sinkConnect(GstElement *input) {
-    if (pipeline == nullptr || input == nullptr || sink == nullptr) {
+bool SinkElement::sinkConnect(GstElement *bin, GstElement *input) {
+    if (bin == nullptr || input == nullptr || sink == nullptr) {
         cerr << "Cannot connect to appsink element" << endl;
         return false;
     }
 
-    if (!gst_bin_add(GST_BIN(pipeline), sink)) {
-        cerr << "Failed to add appsink to pipeline" << endl;
+    if (!gst_bin_add(GST_BIN(bin), sink)) {
+        cerr << "Failed to add appsink to bin" << endl;
         return false;
     }
     addedToBin = true;

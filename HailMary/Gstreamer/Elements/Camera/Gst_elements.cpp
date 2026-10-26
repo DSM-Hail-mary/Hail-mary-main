@@ -45,13 +45,13 @@ bool CameraElement::cameraInit() {
     return true;
 }
 
-bool CameraElement::cameraConnect() {
-    if (pipeline == nullptr || src == nullptr || parse == nullptr) {
+bool CameraElement::cameraConnect(GstElement *bin) {
+    if (bin == nullptr || src == nullptr || parse == nullptr) {
         cerr << "Cannot connect to camera elements" << endl;
         return false;
     }
 
-    gst_bin_add_many(GST_BIN(pipeline), src, parse, nullptr);
+    gst_bin_add_many(GST_BIN(bin), src, parse, nullptr);
     addedToBin = true;
 
     if (!gst_element_link(src, parse)) {

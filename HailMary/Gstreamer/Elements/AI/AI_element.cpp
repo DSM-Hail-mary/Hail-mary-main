@@ -1,6 +1,8 @@
 #include "AI_element.h"
 #include <string>
+#include <iostream>
 #include "gstnvdsmeta.h"
+#include "Elements/Caps/Gst_caps.h"
 using namespace std;
 
 static GstPadProbeReturn aiProbe(GstPad *pad, GstPadProbeInfo *info, gpointer data) {
@@ -92,13 +94,13 @@ bool AIElement::aiInit() {
     return true;
 }
 
-bool AIElement::aiConnect(GstElement *input) {
-    if (pipeline == nullptr || input == nullptr || identity == nullptr) {
+bool AIElement::aiConnect(GstElement *bin, GstElement *input) {
+    if (bin == nullptr || input == nullptr || identity == nullptr) {
         cerr << "Cannot connect to AI elements" << endl;
         return false;
     }
 
-    gst_bin_add_many(GST_BIN(pipeline), queue, upload, uploadCaps, mux, infer,
+    gst_bin_add_many(GST_BIN(bin), queue, upload, uploadCaps, mux, infer,
                      download, downloadCaps, identity, nullptr);
     addedToBin = true;
 

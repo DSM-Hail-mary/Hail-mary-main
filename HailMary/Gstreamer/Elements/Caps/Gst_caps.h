@@ -2,7 +2,6 @@
 #define HAILMARY_GST_CAPS_H
 
 #include <gst/gst.h>
-#include "main_pipeline.h"
 
 static const char *FRAME_FORMAT = "RGBA";
 static const int FRAME_WIDTH = 1280;
@@ -17,7 +16,7 @@ class CapsElement {
         CapsElement &operator=(const CapsElement &) = delete;
 
         bool capsInit();
-        bool capsConnect(GstElement *input);
+        bool capsConnect(GstElement *bin, GstElement *input);
 
         GstElement *getOutput();
 

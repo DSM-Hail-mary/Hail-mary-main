@@ -4,7 +4,6 @@
 #include <gst/gst.h>
 #include <vector>
 #include "AI_types.h"
-#include "main_pipeline.h"
 
 static const char *AI_CONFIG_PATH = HAILMARY_MODEL_DIR "/config_infer_primary_yoloV8.txt";
 
@@ -17,7 +16,7 @@ class AIElement {
         AIElement &operator=(const AIElement &) = delete;
 
         bool aiInit();
-        bool aiConnect(GstElement *input);
+        bool aiConnect(GstElement *bin, GstElement *input);
         void aiProcess(GstBuffer *buffer);
 
         GstElement *getOutput();

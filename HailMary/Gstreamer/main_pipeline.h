@@ -10,11 +10,12 @@
 #include "Elements/AI/AI_element.h"
 #include "Elements/Judge/Gst_judge.h"
 
-extern GstElement *pipeline;
+static const int RECONNECT_MAX_ATTEMPTS = 5;
+static const int RECONNECT_INTERVAL_SEC = 5;
 
 int runPipeline();
 
-void messageBusTest();
-void numberOfPipelines();
+void messageBusTest(GstElement *pipeline);
+void numberOfPipelines(GstElement *pipeline);
 
 #endif
