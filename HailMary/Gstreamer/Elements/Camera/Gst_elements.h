@@ -4,11 +4,10 @@
 #include <gst/gst.h>
 #include <gst/video/video.h>
 
-static const char *OPENCV_HOST = "127.0.0.1";
-static const int OPENCV_PORT = 5000;
-static const int OPENCV_WIDTH = 1280;
-static const int OPENCV_HEIGHT = 720;
-static const int OPENCV_FPS = 30;
+static const char *CAMERA_DEVICE = "/dev/video0";
+static const int CAMERA_WIDTH = 1280;
+static const int CAMERA_HEIGHT = 720;
+static const int CAMERA_FPS = 30;
 
 class CameraElement {
     public:
@@ -25,7 +24,11 @@ class CameraElement {
 
     private:
         GstElement *src;
-        GstElement *parse;
+        GstElement *jpegCaps;
+        GstElement *decode;
+        GstElement *convert;
+        GstElement *output;
+        bool hwDecode;
         bool addedToBin;
 };
 

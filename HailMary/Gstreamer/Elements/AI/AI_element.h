@@ -23,6 +23,7 @@ class AIElement {
 
     private:
         void aiAttachMeta(GstBuffer *buffer, const std::vector<BBox> &boxes);
+        bool aiInitDisplay();
 
         GstElement *queue;
         GstElement *upload;
@@ -32,6 +33,14 @@ class AIElement {
         GstElement *download;
         GstElement *downloadCaps;
         GstElement *identity;
+        GstElement *tee;
+        GstElement *mainQueue;
+        GstElement *displayQueue;
+        GstElement *displayConvert;
+        GstElement *displayCaps;
+        GstElement *osd;
+        GstElement *display;
+        bool showDisplay;
         bool addedToBin;
 };
 

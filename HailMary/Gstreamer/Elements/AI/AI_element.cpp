@@ -1,4 +1,5 @@
 #include "AI_element.h"
+#include <cstdlib>
 #include <string>
 #include <iostream>
 #include "gstnvdsmeta.h"
@@ -24,6 +25,14 @@ AIElement::AIElement() {
     download = nullptr;
     downloadCaps = nullptr;
     identity = nullptr;
+    tee = nullptr;
+    mainQueue = nullptr;
+    displayQueue = nullptr;
+    displayConvert = nullptr;
+    displayCaps = nullptr;
+    osd = nullptr;
+    display = nullptr;
+    showDisplay = false;
     addedToBin = false;
 }
 
@@ -37,6 +46,13 @@ AIElement::~AIElement() {
         if (download != nullptr) gst_object_unref(download);
         if (downloadCaps != nullptr) gst_object_unref(downloadCaps);
         if (identity != nullptr) gst_object_unref(identity);
+        if (tee != nullptr) gst_object_unref(tee);
+        if (mainQueue != nullptr) gst_object_unref(mainQueue);
+        if (displayQueue != nullptr) gst_object_unref(displayQueue);
+        if (displayConvert != nullptr) gst_object_unref(displayConvert);
+        if (displayCaps != nullptr) gst_object_unref(displayCaps);
+        if (osd != nullptr) gst_object_unref(osd);
+        if (display != nullptr) gst_object_unref(display);
     }
     queue = nullptr;
     identity = nullptr;
@@ -91,6 +107,41 @@ bool AIElement::aiInit() {
     g_object_set(downloadCaps, "caps", rawCaps, nullptr);
     gst_caps_unref(rawCaps);
 
+    const char *show = getenv("HAILMARY_SHOW");
+    showDisplay = show != nullptr && string(show) == "1";
+    if (showDisplay && !aiInitDisplay()) {
+        return false;
+    }
+
+    return true;
+}
+
+bool AIElement::aiInitDisplay() {
+    tee = gst_element_factory_make("tee", "ai_tee");
+    mainQueue = gst_element_factory_make("queue", "ai_main_queue");
+    displayQueue = gst_element_factory_make("queue", "ai_display_queue");
+    displayConvert = gst_element_factory_make("nvvideoconvert", "ai_display_convert");
+    displayCaps = gst_element_factory_make("capsfilter", "ai_display_caps");
+    osd = gst_element_factory_make("nvdsosd", "ai_osd");
+    display = gst_element_factory_make("nv3dsink", "ai_display");
+    if (!tee || !mainQueue || !displayQueue || !displayConvert || !displayCaps || !osd || !display) {
+        cerr << "Failed to create display elements" << endl;
+        return false;
+    }
+
+    g_object_set(displayQueue,
+                 "leaky", 2,
+                 "max-size-buffers", 1,
+                 "max-size-bytes", 0,
+                 "max-size-time", (guint64) 0,
+                 nullptr);
+
+    GstCaps *osdCaps = gst_caps_from_string("video/x-raw(memory:NVMM),format=RGBA");
+    g_object_set(displayCaps, "caps", osdCaps, nullptr);
+    gst_caps_unref(osdCaps);
+
+    g_object_set(display, "sync", FALSE, nullptr);
+
     return true;
 }
 
@@ -119,7 +170,16 @@ bool AIElement::aiConnect(GstElement *bin, GstElement *input) {
         return false;
     }
 
-    if (!gst_element_link_many(mux, infer, download, downloadCaps, identity, nullptr)) {
+    if (showDisplay) {
+        gst_bin_add_many(GST_BIN(bin), tee, mainQueue, displayQueue, displayConvert, displayCaps,
+                         osd, display, nullptr);
+        if (!gst_element_link_many(mux, infer, tee, mainQueue, download, downloadCaps, identity, nullptr) ||
+            !gst_element_link_many(tee, displayQueue, displayConvert, displayCaps, osd, display, nullptr)) {
+            cerr << "Failed to link AI display elements" << endl;
+            return false;
+        }
+        cout << "Display on (nvdsosd)" << endl;
+    } else if (!gst_element_link_many(mux, infer, download, downloadCaps, identity, nullptr)) {
         cerr << "Failed to link AI inference elements" << endl;
         return false;
     }

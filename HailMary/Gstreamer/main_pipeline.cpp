@@ -110,7 +110,7 @@ int runPipeline() {
                 cout << "Stream disconnected, reconnecting (" << reconnectAttempts << "/"
                      << RECONNECT_MAX_ATTEMPTS << ")" << endl;
 
-                // tcpserversrc listens again once the pipeline is restarted
+                // Restart the pipeline so the camera is reopened
                 gst_element_set_state(pipeline, GST_STATE_NULL);
                 if (!waitOrStop(RECONNECT_INTERVAL_SEC)) {
                     running = false;
@@ -121,7 +121,7 @@ int runPipeline() {
                 }
                 break;
             case GST_MESSAGE_ASYNC_DONE:
-                // Preroll finished: a client is connected and frames are flowing
+                // Preroll finished: the camera is open and frames are flowing
                 if (GST_MESSAGE_SRC(msg) == GST_OBJECT(pipeline) && reconnectAttempts > 0) {
                     cout << "Stream reconnected" << endl;
                     reconnectAttempts = 0;
