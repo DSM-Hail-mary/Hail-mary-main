@@ -1,3 +1,4 @@
 models/*.engine
 models/libnvdsinfer_custom_impl_Yolo.so
 models/DeepStream-Yolo/
+snapshots/
