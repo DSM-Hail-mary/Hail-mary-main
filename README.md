@@ -36,7 +36,7 @@ USB 카메라 → Camera → Caps → AI(nvinfer) → Judge → Sink
 | Camera | USB 카메라 MJPG 1280x720@30 캡처 + NVDEC 디코드 (`HAILMARY_CAMERA`, 기본 `/dev/video0`) |
 | Caps | 포맷 변환 (RGBA) |
 | AI | DeepStream YOLOv8 추론 (crow_house, pole). `HAILMARY_SHOW=1`이면 nvdsosd로 탐지 박스 화면 표시 |
-| Judge | 위험/주의 판정, 크롭 jpg + 판정 json 저장 (`HAILMARY_SNAPSHOT_DIR`), `JudgeResult` 전달 |
+| Judge | 위험/주의 판정, 빨간 박스 전체 프레임(`_box.jpg`) + 크롭 jpg + 판정 json 저장 (`HAILMARY_SNAPSHOT_DIR`), `JudgeResult` 전달 |
 | Sink | 콜백으로 프레임 + 판정 결과 전달 |
 
 ## 구조

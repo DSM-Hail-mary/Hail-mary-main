@@ -18,7 +18,7 @@ HailMary(C++) ──snapshots/*.jpg + *.json──▶ uploader.py ──WS /ws/d
 
 ## snapshot 형식 (C++ Judge → uploader)
 
-`snapshot_<시각>_<번호>.jpg`(탐지 영역 크롭)와 같은 이름의 `.json`:
+`snapshot_<시각>_<번호>.jpg`(탐지 영역 크롭, 서버 전송)와 같은 이름의 `.json`. 빨간 박스를 그린 전체 프레임 `snapshot_<시각>_<번호>_box.jpg`는 Jetson에만 저장:
 
 ```json
 {"grade": "danger", "hazard_type": "nest", "conf": 0.7, "recorded_at": "2026-11-08T19:18:17+09:00",

@@ -282,11 +282,64 @@ void JudgeElement::judgeSnapshot(SnapshotJob &job) {
     gst_buffer_unmap(cropBuffer, &dst);
     gst_buffer_unmap(job.buffer, &src);
 
+    tm local;
+    localtime_r(&job.time, &local);
+    char stamp[32];
+    strftime(stamp, sizeof(stamp), "%Y%m%d_%H%M%S", &local);
+    string name = "snapshot_" + string(stamp) + "_" + to_string(job.index);
+    string image = name + ".jpg";
+
     GstCaps *cropCaps = gst_video_info_to_caps(&cropInfo);
-    GstSample *sample = gst_sample_new(cropBuffer, cropCaps, nullptr, nullptr);
+    bool cropSaved = judgeEncodeJpeg(cropBuffer, cropCaps, snapshotDir + "/" + image);
     gst_caps_unref(cropCaps);
     gst_buffer_unref(cropBuffer);
 
+    GstMapInfo map;
+    if (gst_buffer_map(job.buffer, &map, GST_MAP_WRITE)) {
+        int red = GST_VIDEO_INFO_COMP_POFFSET(&info, GST_VIDEO_COMP_R);
+        int green = GST_VIDEO_INFO_COMP_POFFSET(&info, GST_VIDEO_COMP_G);
+        int blue = GST_VIDEO_INFO_COMP_POFFSET(&info, GST_VIDEO_COMP_B);
+        int thickness = 2;
+
+        for (const BBox &box : job.boxes) {
+            if (box.classId != JUDGE_PROBLEM_CLASS || box.score < JUDGE_CAUTION_SCORE) {
+                continue;
+            }
+            int bx0 = max(0, box.x);
+            int by0 = max(0, box.y);
+            int bx1 = min(width - 1, box.x + box.width);
+            int by1 = min(height - 1, box.y + box.height);
+
+            for (int y = by0; y <= by1; y++) {
+                for (int x = bx0; x <= bx1; x++) {
+                    bool edge = x < bx0 + thickness || x > bx1 - thickness ||
+                                y < by0 + thickness || y > by1 - thickness;
+                    if (!edge) {
+                        continue;
+                    }
+                    uint8_t *pixel = map.data + y * stride + x * pixelStride;
+                    pixel[red] = 255;
+                    pixel[green] = 0;
+                    pixel[blue] = 0;
+                }
+            }
+        }
+        gst_buffer_unmap(job.buffer, &map);
+
+        string boxed = name + "_box.jpg";
+        if (judgeEncodeJpeg(job.buffer, job.caps, snapshotDir + "/" + boxed)) {
+            cout << "Snapshot saved: " << snapshotDir << "/" << boxed << endl;
+        }
+    }
+
+    if (cropSaved) {
+        judgeWriteMeta(job, image, x0, y0, cropWidth, cropHeight);
+        cout << "Snapshot saved: " << snapshotDir << "/" << image << endl;
+    }
+}
+
+bool JudgeElement::judgeEncodeJpeg(GstBuffer *buffer, GstCaps *caps, const string &path) {
+    GstSample *sample = gst_sample_new(buffer, caps, nullptr, nullptr);
     GstCaps *jpegCaps = gst_caps_new_empty_simple("image/jpeg");
     GError *error = nullptr;
     GstSample *jpeg = gst_video_convert_sample(sample, jpegCaps, GST_SECOND, &error);
@@ -296,28 +349,21 @@ void JudgeElement::judgeSnapshot(SnapshotJob &job) {
     if (jpeg == nullptr) {
         cerr << "Failed to encode snapshot: " << (error ? error->message : "unknown") << endl;
         if (error) g_error_free(error);
-        return;
+        return false;
     }
 
+    bool saved = false;
     GstBuffer *jpegBuffer = gst_sample_get_buffer(jpeg);
     GstMapInfo map;
     if (gst_buffer_map(jpegBuffer, &map, GST_MAP_READ)) {
-        tm local;
-        localtime_r(&job.time, &local);
-        char stamp[32];
-        strftime(stamp, sizeof(stamp), "%Y%m%d_%H%M%S", &local);
-
-        string name = "snapshot_" + string(stamp) + "_" + to_string(job.index);
-        string image = name + ".jpg";
-        ofstream file(snapshotDir + "/" + image, ios::binary);
+        ofstream file(path, ios::binary);
         file.write(reinterpret_cast<const char *>(map.data), map.size);
         file.close();
+        saved = file.good();
         gst_buffer_unmap(jpegBuffer, &map);
-
-        judgeWriteMeta(job, image, x0, y0, cropWidth, cropHeight);
-        cout << "Snapshot saved: " << snapshotDir << "/" << image << endl;
     }
     gst_sample_unref(jpeg);
+    return saved;
 }
 
 void JudgeElement::judgeWriteMeta(const SnapshotJob &job, const string &image, int x0, int y0, int cropWidth,

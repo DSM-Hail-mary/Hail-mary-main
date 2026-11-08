@@ -53,6 +53,7 @@ class JudgeElement {
                                 const BBox &target, const std::string &grade);
         void judgeSnapshotWorker();
         void judgeSnapshot(SnapshotJob &job);
+        bool judgeEncodeJpeg(GstBuffer *buffer, GstCaps *caps, const std::string &path);
         void judgeWriteMeta(const SnapshotJob &job, const std::string &image, int x0, int y0, int cropWidth,
                             int cropHeight);
 
